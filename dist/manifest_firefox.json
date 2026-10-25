@@ -45,6 +45,8 @@
             "background/tabs.js",
             "background/page.js",
             "background/event.js",
+            "background/jsQR.js",
+            "background/save-totp.js",
             "background/init.js"
         ]
     },

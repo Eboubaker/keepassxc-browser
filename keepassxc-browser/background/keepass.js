@@ -64,7 +64,7 @@ keepass.addCredentials = async function(tab, args = []) {
 
 keepass.updateCredentials = async function(tab, args = []) {
     try {
-        const [ entryId, username, password, url, group, groupUuid ] = args;
+        const [ entryId, username, password, url, group, groupUuid, totp ] = args;
 
         if (containsPlaceholder(username) || containsPlaceholder(password)) {
             logError('References are not allowed in username or password');
@@ -101,6 +101,10 @@ keepass.updateCredentials = async function(tab, args = []) {
         if (group && groupUuid) {
             messageData.group = group;
             messageData.groupUuid = groupUuid;
+        }
+
+        if (totp) {
+            messageData.totp = totp;
         }
 
         const response = await keepassClient.sendMessage(kpAction, tab, messageData, nonce);

@@ -75,6 +75,34 @@
         "message": "Show Password Generator Icons",
         "description": "Show password generator icon on every password input field."
     },
+    "contextMenuSaveTotp": {
+        "message": "Save TOTP to KeePassXC",
+        "description": "Context menu item that saves a TOTP secret or QR code on the page to an entry."
+    },
+    "saveTotpNotFound": {
+        "message": "No TOTP secret found. Select the secret key, or make sure the QR code is visible on screen.",
+        "description": "Shown when no TOTP secret or QR code was found on the page."
+    },
+    "saveTotpCreateEntry": {
+        "message": "No KeePassXC entry matches this site. Create a new entry with this TOTP?",
+        "description": "Confirmation when saving a TOTP for a site without entries."
+    },
+    "saveTotpConfirmEntry": {
+        "message": "Save this TOTP to $1?",
+        "description": "Confirmation when saving a TOTP to the only matching entry. $1 is the entry name and username."
+    },
+    "saveTotpChooseEntry": {
+        "message": "Save this TOTP to which entry? Enter its number:",
+        "description": "Prompt to choose an entry when several match the site."
+    },
+    "saveTotpSaved": {
+        "message": "TOTP saved to KeePassXC.",
+        "description": "Shown after a TOTP was saved."
+    },
+    "saveTotpNotSaved": {
+        "message": "The TOTP was not saved. It may have been cancelled in KeePassXC, already be saved, or KeePassXC may not support saving TOTPs.",
+        "description": "Shown when KeePassXC did not save the TOTP."
+    },
     "contextMenuSaveCredentials": {
         "message": "Save Credentials",
         "description": "Save credentials using the credential banner."

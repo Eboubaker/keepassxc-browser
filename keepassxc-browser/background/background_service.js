@@ -16,6 +16,8 @@ try {
         'credentials.js',
         'page.js',
         'event.js',
+        'jsQR.js',
+        'save-totp.js',
         'init.js'
     );
 } catch (e) {

@@ -54,6 +54,11 @@ const initListeners = async function() {
             return;
         }
 
+        if (item?.menuItemId === 'save_totp') {
+            await saveTotp.fromContextMenu(item, tab);
+            return;
+        }
+
         if (item?.menuItemId?.startsWith('fill_attribute')) {
             const menuItem = page.attributeMenuItems.find(i => i?.action === item?.menuItemId);
             if (menuItem) {
@@ -108,6 +113,17 @@ const initContextMenuItems = async function() {
         } catch (e) {
             logError(e);
         }
+    }
+
+    // Works on the whole page, since the secret is usually shown as a QR code or plain text
+    try {
+        await browser.contextMenus.create({
+            title: tr('contextMenuSaveTotp'),
+            contexts: [ 'page', 'frame', 'selection', 'link', 'image' ],
+            id: 'save_totp'
+        });
+    } catch (e) {
+        logError(e);
     }
 };
 

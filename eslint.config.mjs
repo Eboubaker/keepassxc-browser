@@ -13,7 +13,7 @@ const compat = new FlatCompat({
     allConfig: js.configs.all
 });
 
-export default defineConfig([globalIgnores(["**/*.min.js"]), {
+export default defineConfig([globalIgnores(["**/*.min.js", "keepassxc-browser/background/jsQR.js"]), {
     extends: compat.extends("eslint:recommended"),
     languageOptions: {
         globals: {
@@ -58,6 +58,7 @@ export default defineConfig([globalIgnores(["**/*.min.js"]), {
             getIconClass: "readonly",
             getLoginData: "readonly",
             getTopLevelDomainFromUrl: "readonly",
+            jsQR: "readonly",
             GRAY_BUTTON_CLASS: "readonly",
             GREEN_BUTTON: "readonly",
             httpAuth: "readonly",
@@ -120,6 +121,7 @@ export default defineConfig([globalIgnores(["**/*.min.js"]), {
             PREDEFINED_SITELIST: "readonly",
             RED_BUTTON: "readonly",
             retrieveColorScheme: "readonly",
+            saveTotp: "readonly",
             sendMessage: "readonly",
             showNotification: "readonly",
             siteMatch: "readonly",

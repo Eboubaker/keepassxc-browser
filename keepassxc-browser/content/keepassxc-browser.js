@@ -236,6 +236,25 @@ kpxc.identifyFormInputs = async function() {
     return inputs;
 };
 
+// Returns the index of the entry to save the TOTP to, or -1 when cancelled.
+// With no matching entries, index 0 means a new entry should be created.
+// Native dialogs keep this local-only feature small; it is not meant for upstream.
+/* eslint-disable no-alert */
+kpxc.chooseTotpEntry = function(entries) {
+    if (!entries?.length) {
+        return window.confirm(tr('saveTotpCreateEntry')) ? 0 : -1;
+    }
+    if (entries.length === 1) {
+        return window.confirm(tr('saveTotpConfirmEntry', `${entries[0].name} (${entries[0].login})`)) ? 0 : -1;
+    }
+
+    const list = entries.map((e, i) => `${i + 1}: ${e.name} (${e.login})`).join('\n');
+    const answer = window.prompt(`${tr('saveTotpChooseEntry')}\n\n${list}`, '1');
+    const index = Number(answer) - 1;
+    return Number.isInteger(index) && index >= 0 && index < entries.length ? index : -1;
+};
+/* eslint-enable no-alert */
+
 // Ignore a certain site
 kpxc.ignoreSite = async function(sites) {
     const site = kpxc.getSite(sites);
@@ -950,6 +969,8 @@ browser.runtime.onMessage.addListener(async function(req, sender) {
                 // Handle notification from iframe in top window
                 kpxcUI.createNotification(req?.args[1], req?.args[2]);
             }
+        } else if (req.action === 'save_totp_choose_entry') {
+            return kpxc.chooseTotpEntry(req.args);
         } else if (req.action === 'ignore_site') {
             kpxc.ignoreSite(req.args);
         } else if (req.action === 'is_site_ignored') {
