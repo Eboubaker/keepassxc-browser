@@ -103,6 +103,10 @@
         "message": "The TOTP was not saved. It may have been cancelled in KeePassXC, already be saved, or KeePassXC may not support saving TOTPs.",
         "description": "Shown when KeePassXC did not save the TOTP."
     },
+    "pageSaveConfirm": {
+        "message": "$1 wants to save a login to KeePassXC:\n\nSite: $2\nUsername: $3\n\nSave it?",
+        "description": "Confirmation when a web page asks to save a credential. $1 is the requesting origin, $2 the entry URL, $3 the username."
+    },
     "contextMenuSaveCredentials": {
         "message": "Save Credentials",
         "description": "Save credentials using the credential banner."
