@@ -54,6 +54,11 @@ const initListeners = async function() {
             return;
         }
 
+        if (item?.menuItemId === 'manage_page_access') {
+            await browser.tabs.create({ url: browser.runtime.getURL('options/page-access.html') });
+            return;
+        }
+
         if (item?.menuItemId === 'save_totp') {
             await saveTotp.fromContextMenu(item, tab);
             return;
@@ -121,6 +126,12 @@ const initContextMenuItems = async function() {
             title: tr('contextMenuSaveTotp'),
             contexts: [ 'page', 'frame', 'selection', 'link', 'image' ],
             id: 'save_totp'
+        });
+        // On the toolbar icon's right-click menu
+        await browser.contextMenus.create({
+            title: tr('contextMenuManagePageAccess'),
+            contexts: [ 'action' ],
+            id: 'manage_page_access'
         });
     } catch (e) {
         logError(e);

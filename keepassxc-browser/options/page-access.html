@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title data-i18n="pageAccessTitle"></title>
+    <meta charset="UTF-8">
+    <link rel="stylesheet" href="../css/colors.css">
+    <link rel="stylesheet" href="../bootstrap/bootstrap.min.css">
+    <link rel="stylesheet" href="../fonts/fork-awesome.min.css">
+    <link rel="stylesheet" href="shortcuts.css">
+    <link rel="icon" type="image/png" href="../icons/keepassxc_32x32.png" sizes="32x32">
+    <script src="../common/browser-polyfill.min.js"></script>
+    <script defer src="../common/global.js"></script>
+    <script defer src="page-access.js"></script>
+    <script defer src="../common/translate.js"></script>
+  </head>
+  <body>
+    <div class="conf-container">
+      <div class="conf-title">
+        <div id="icon">
+          <img src="/icons/keepassxc_19x19.png" alt="logo">
+        </div>
+        <div id="title">
+          <h5 class="muted"><span data-i18n="pageAccessTitle"></span></h5>
+        </div>
+      </div>
+      <hr>
+      <p data-i18n="pageAccessDescription"></p>
+      <p id="empty" class="text-muted" data-i18n="pageAccessEmpty" hidden></p>
+      <table class="table table-sm" id="sites" hidden>
+        <thead>
+          <tr>
+            <th data-i18n="pageAccessSite"></th>
+            <th data-i18n="pageAccessEntries"></th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+      <button class="btn btn-sm btn-danger" id="revokeAll" type="button" hidden>
+        <i class="fa fa-remove" aria-hidden="true"></i>
+        <span data-i18n="pageAccessRevokeAll"></span>
+      </button>
+    </div>
+  </body>
+</html>

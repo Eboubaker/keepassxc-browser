@@ -99,6 +99,60 @@ pageSave.holds = async function(entry, password, totp) {
     return !codes || codes.includes(entry.totp);
 };
 
+// Sites the user confirmed a save from, and the entries each one saved:
+// { [origin]: { entries: [ { uuid, url } ] } }. Query and remove only see a site's own entries,
+// so a site can't probe or delete anything else in the database. Managed in options/page-access.
+pageSave.originOf = function(tab) {
+    try {
+        const origin = new URL(tab?.url).origin;
+        return origin.startsWith('http') ? origin : undefined;
+    } catch (_e) {
+        return undefined;
+    }
+};
+
+pageSave.loadSites = async function() {
+    const { pageSaveSites = {}, pageSaveTrustedOrigins } = await browser.storage.local.get(
+        [ 'pageSaveSites', 'pageSaveTrustedOrigins' ]);
+
+    // Earlier builds only kept trusted origins; they keep their trust but have no entries yet
+    if (pageSaveTrustedOrigins) {
+        for (const origin of pageSaveTrustedOrigins) {
+            pageSaveSites[origin] ??= { entries: [] };
+        }
+        await browser.storage.local.set({ pageSaveSites });
+        await browser.storage.local.remove('pageSaveTrustedOrigins');
+    }
+    return pageSaveSites;
+};
+
+// The site's record, or undefined when the user never confirmed a save from it
+pageSave.siteOf = async function(tab) {
+    const origin = pageSave.originOf(tab);
+    return origin ? (await pageSave.loadSites())[origin] : undefined;
+};
+
+pageSave.recordEntry = async function(tab, uuid, url) {
+    const origin = pageSave.originOf(tab);
+    if (!origin || !uuid) {
+        return;
+    }
+    const sites = await pageSave.loadSites();
+    const site = sites[origin] ?? { entries: [] };
+    site.entries = [ ...site.entries.filter(e => e.uuid !== uuid), { uuid, url } ];
+    sites[origin] = site;
+    await browser.storage.local.set({ pageSaveSites: sites });
+};
+
+pageSave.forgetEntry = async function(tab, uuid) {
+    const origin = pageSave.originOf(tab);
+    const sites = await pageSave.loadSites();
+    if (sites[origin]) {
+        sites[origin].entries = sites[origin].entries.filter(e => e.uuid !== uuid);
+        await browser.storage.local.set({ pageSaveSites: sites });
+    }
+};
+
 // Args: [ url, username, password, totp ]. Tells the content script what saving would do.
 pageSave.onLookup = async function(tab, args = []) {
     const [ url, username, password, rawTotp ] = args;
@@ -114,44 +168,54 @@ pageSave.onLookup = async function(tab, args = []) {
     }
     pageSave.log('lookup:', url, pageSave.mask(username), `${found.entries.length} entries for the URL,`,
         found.entry ? `matches ${found.entry.uuid}` : 'no entry with this username');
-    if (found.entry && await pageSave.holds(found.entry, password, totp)) {
+
+    // Skip the dialog only for this site's own entries; any other match still needs the user to
+    // confirm, which also links the entry to the site
+    const site = await pageSave.siteOf(tab);
+    const own = found.entry && site?.entries.some(e => e.uuid === found.entry.uuid);
+    if (own && await pageSave.holds(found.entry, password, totp)) {
         return { result: 'unchanged' };
     }
     return { existing: found.entry ? { name: found.entry.name, login: found.entry.login } : null };
 };
 
 // Args: [ url, username, password, totp ]. Returns created, updated, unchanged, canceled,
-// invalid-totp, totp-not-saved or error.
+// invalid-totp, totp-not-saved or error. A saved entry is recorded as this site's own.
 pageSave.onCommit = async function(tab, args = []) {
+    const { result, uuid } = await pageSave.commit(tab, args);
+    if (uuid && [ CreationError.CREATED, 'updated', 'unchanged' ].includes(result)) {
+        await pageSave.recordEntry(tab, uuid, args[0]);
+    }
+    return result;
+};
+
+pageSave.commit = async function(tab, args = []) {
     const [ url, username, password, rawTotp ] = args;
     const totp = rawTotp ? saveTotp.parseSecret(rawTotp, 1) : undefined;
     if (rawTotp && !totp) {
-        return 'invalid-totp';
+        return { result: 'invalid-totp' };
     }
-
-    // The user confirmed a save from this site, so it may also ask which logins are saved
-    await pageSave.trustOrigin(tab);
 
     const before = await pageSave.lookup(tab, url, username);
     if (before.error) {
-        return CreationError.GENERAL;
+        return { result: CreationError.GENERAL };
     }
     const existing = before.entry;
     if (existing && await pageSave.holds(existing, password, totp)) {
-        return 'unchanged';
+        return { result: 'unchanged', uuid: existing.uuid };
     }
 
     const result = await keepass.updateCredentials(tab, [ existing?.uuid, username, password, url, null, null, totp ]);
     pageSave.log('commit:', existing ? `update ${existing.uuid}` : 'new entry', pageSave.mask(username),
         totp ? 'with TOTP' : 'without TOTP', '-> KeePassXC replied', result);
     if (result === CreationError.REFERENCES || (!existing && result !== CreationError.CREATED)) {
-        return CreationError.GENERAL;
+        return { result: CreationError.GENERAL };
     }
 
     // Read the entry back: KeePassXC answers "success" even when it drops a field it doesn't know
     const after = await pageSave.lookup(tab, url, username);
     if (after.error) {
-        return CreationError.GENERAL;
+        return { result: CreationError.GENERAL };
     }
 
     const knownUuids = new Set(before.entries.map(e => e.uuid));
@@ -162,53 +226,40 @@ pageSave.onCommit = async function(tab, args = []) {
         saved ? `password ${saved.password === password ? 'matches' : 'differs'}, TOTP ${saved.totp ? 'present' : 'absent'}` : '');
 
     if (await pageSave.holds(saved, password, totp)) {
-        return existing ? 'updated' : CreationError.CREATED;
+        return { result: existing ? 'updated' : CreationError.CREATED, uuid: saved.uuid };
     }
     // KeePassXC replies "error" when the user declines its Update Entry dialog
     if (existing && result !== CreationError.UPDATED) {
-        return CreationError.CANCELED;
+        return { result: CreationError.CANCELED };
     }
-    return saved?.password === password ? 'totp-not-saved' : CreationError.GENERAL;
+    return saved?.password === password ? { result: 'totp-not-saved', uuid: saved.uuid } : { result: CreationError.GENERAL };
 };
 
-// Sites the user confirmed a save from. Only they may query, because a query runs without a
-// dialog and would otherwise let any site probe which accounts the database holds.
-pageSave.originOf = function(tab) {
-    try {
-        const origin = new URL(tab?.url).origin;
-        return origin.startsWith('http') ? origin : undefined;
-    } catch (_e) {
-        return undefined;
-    }
-};
-
-pageSave.trustOrigin = async function(tab) {
-    const origin = pageSave.originOf(tab);
-    if (!origin) {
-        return;
-    }
-    const { pageSaveTrustedOrigins = [] } = await browser.storage.local.get('pageSaveTrustedOrigins');
-    if (!pageSaveTrustedOrigins.includes(origin)) {
-        await browser.storage.local.set({ pageSaveTrustedOrigins: [ ...pageSaveTrustedOrigins, origin ] });
-    }
-};
-
-pageSave.isTrusted = async function(tab) {
-    const origin = pageSave.originOf(tab);
-    const { pageSaveTrustedOrigins = [] } = await browser.storage.local.get('pageSaveTrustedOrigins');
-    return Boolean(origin) && pageSaveTrustedOrigins.includes(origin);
-};
+// One query per site every two seconds; the page queries once on load
+pageSave.QUERY_INTERVAL_MS = 2000;
+pageSave.lastQuery = {};
 
 // Args: [ entries ] with { key, url, username, password, totp }. Reads only: never writes,
 // never unlocks the database, and returns only a status per key, never entry contents.
-// Statuses: saved, saved-no-totp, differs, missing.
+// Statuses: saved, saved-no-totp, differs, missing. Only the site's own entries count: anything
+// else is "missing", so the answer reveals nothing the site didn't save itself.
+// Returns { silent: true } for a site that is not trusted, so it gets no reply at all.
 pageSave.onQuery = async function(tab, args = []) {
     const [ requested = [] ] = args;
-    if (!await pageSave.isTrusted(tab)) {
-        pageSave.log('query refused: no save was confirmed from', pageSave.originOf(tab));
+    const site = await pageSave.siteOf(tab);
+    const origin = pageSave.originOf(tab);
+    if (!site) {
+        pageSave.log('query ignored: no save was confirmed from', origin);
+        return { silent: true };
+    }
+    if (Date.now() - (pageSave.lastQuery[origin] ?? 0) < pageSave.QUERY_INTERVAL_MS) {
+        pageSave.log('query refused: too soon after the last one from', origin);
         return { result: CreationError.GENERAL };
     }
+    pageSave.lastQuery[origin] = Date.now();
 
+    const own = new Set(site.entries.map(e => e.uuid));
+    const ownUrls = new Set(site.entries.map(e => e.url));
     const statuses = {};
     const byUrl = new Map();
     for (const item of requested) {
@@ -216,11 +267,12 @@ pageSave.onQuery = async function(tab, args = []) {
     }
 
     for (const [ url, items ] of byUrl) {
-        const entries = await keepass.retrieveCredentials(tab, [ url, url, false ]);
-        if (keepass.isDatabaseClosed) {
+        // Only ask KeePassXC about URLs this site saved to, so it can't trigger access prompts elsewhere
+        const entries = ownUrls.has(url) ? await keepass.retrieveCredentials(tab, [ url, url, false ]) : [];
+        if (ownUrls.has(url) && keepass.isDatabaseClosed) {
             return { result: 'locked' };
         }
-        if (!keepass.isConnected) {
+        if (ownUrls.has(url) && !keepass.isConnected) {
             return { result: CreationError.GENERAL };
         }
 
@@ -229,9 +281,7 @@ pageSave.onQuery = async function(tab, args = []) {
             if (item.totp && !totp) {
                 continue; // An invalid secret can't be compared, so leave this row's status out
             }
-            const entry = item.username
-                ? entries.find(e => e.login?.toLowerCase() === item.username.toLowerCase())
-                : undefined;
+            const entry = entries.find(e => own.has(e.uuid) && e.login?.toLowerCase() === item.username.toLowerCase());
 
             if (!entry) {
                 statuses[item.key] = 'missing';
@@ -249,13 +299,22 @@ pageSave.onQuery = async function(tab, args = []) {
     return { result: 'ok', statuses };
 };
 
-// Finds the single entry to remove. More than one match is an error: never guess what to delete.
+// Finds the single entry to remove among the site's own. More than one match is an error:
+// never guess what to delete.
 pageSave.findForRemoval = async function(tab, url, username) {
-    if (!await pageSave.isTrusted(tab)) {
-        pageSave.log('remove refused: no save was confirmed from', pageSave.originOf(tab));
-        return { result: CreationError.GENERAL };
+    const site = await pageSave.siteOf(tab);
+    if (!site) {
+        pageSave.log('remove ignored: no save was confirmed from', pageSave.originOf(tab));
+        return { silent: true };
     }
 
+    // Only ask KeePassXC about URLs this site saved to, so it can't trigger prompts for other sites
+    if (!site.entries.some(e => e.url === url)) {
+        pageSave.log('remove lookup:', url, 'is not a URL this site saved to');
+        return { result: 'missing' };
+    }
+
+    const own = new Set(site.entries.map(e => e.uuid));
     const entries = await keepass.retrieveCredentials(tab, [ url, url, true ]);
     if (keepass.isDatabaseClosed) {
         return { result: 'locked' };
@@ -264,8 +323,8 @@ pageSave.findForRemoval = async function(tab, url, username) {
         return { result: CreationError.GENERAL };
     }
 
-    const matches = entries.filter(e => e.login?.toLowerCase() === username.toLowerCase());
-    pageSave.log('remove lookup:', url, pageSave.mask(username), `${matches.length} matching entries`);
+    const matches = entries.filter(e => own.has(e.uuid) && e.login?.toLowerCase() === username.toLowerCase());
+    pageSave.log('remove lookup:', url, pageSave.mask(username), `${matches.length} matching entries saved by this site`);
     if (matches.length === 0) {
         return { result: 'missing' };
     }
@@ -279,7 +338,10 @@ pageSave.findForRemoval = async function(tab, url, username) {
 pageSave.onRemoveLookup = async function(tab, args = []) {
     const [ url, username ] = args;
     const found = await pageSave.findForRemoval(tab, url, username);
-    return found.entry ? { existing: { name: found.entry.name, login: found.entry.login } } : { result: found.result };
+    if (found.entry) {
+        return { existing: { name: found.entry.name, login: found.entry.login } };
+    }
+    return found.silent ? { silent: true } : { result: found.result };
 };
 
 // Args: [ url, username ]. Returns removed, missing, canceled, locked or error.
@@ -287,7 +349,7 @@ pageSave.onRemoveCommit = async function(tab, args = []) {
     const [ url, username ] = args;
     const found = await pageSave.findForRemoval(tab, url, username);
     if (!found.entry) {
-        return found.result;
+        return found.result ?? CreationError.GENERAL;
     }
 
     // KeePassXC asks once more, then moves the entry to the Recycle Bin
@@ -305,6 +367,7 @@ pageSave.onRemoveCommit = async function(tab, args = []) {
     const stillThere = after.some(e => e.uuid === found.entry.uuid);
     pageSave.log('remove read back:', stillThere ? 'entry still present' : 'entry gone');
     if (!stillThere) {
+        await pageSave.forgetEntry(tab, found.entry.uuid);
         return 'removed';
     }
     return response?.success === 'false' ? CreationError.CANCELED : CreationError.GENERAL;

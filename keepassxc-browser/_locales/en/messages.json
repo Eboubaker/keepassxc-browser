@@ -115,6 +115,38 @@
         "message": "$1 wants to REMOVE the KeePassXC entry \"$2\" ($3).\n\nKeePassXC moves it to the Recycle Bin, or deletes it permanently if your database has the Recycle Bin turned off. KeePassXC will ask once more.\n\nRemove it?",
         "description": "Confirmation when a web page asks to remove an entry. $1 is the requesting origin, $2 the entry title, $3 its username."
     },
+    "contextMenuManagePageAccess": {
+        "message": "Sites with KeePassXC page access",
+        "description": "Toolbar icon menu item that opens the list of sites allowed to query and remove their entries."
+    },
+    "pageAccessTitle": {
+        "message": "Sites with KeePassXC page access",
+        "description": "Title of the page listing sites that may query and remove their own entries."
+    },
+    "pageAccessDescription": {
+        "message": "These sites asked to save logins and you confirmed at least once. Each may check and remove only the entries it saved itself. Revoking a site only stops that; the entries stay in KeePassXC.",
+        "description": "Explanation on the page access list."
+    },
+    "pageAccessEmpty": {
+        "message": "No site has page access.",
+        "description": "Shown when no site has page access."
+    },
+    "pageAccessSite": {
+        "message": "Site",
+        "description": "Column header: the site's origin."
+    },
+    "pageAccessEntries": {
+        "message": "Entries it saved",
+        "description": "Column header: how many entries the site saved, and for which URLs."
+    },
+    "pageAccessRevoke": {
+        "message": "Revoke",
+        "description": "Button that revokes one site's access."
+    },
+    "pageAccessRevokeAll": {
+        "message": "Revoke all",
+        "description": "Button that revokes every site's access."
+    },
     "contextMenuSaveCredentials": {
         "message": "Save Credentials",
         "description": "Save credentials using the credential banner."

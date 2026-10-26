@@ -63,7 +63,8 @@ kpxcPageSave.onMessage = async function(event) {
 // Read-only: the page posts { type: 'keepassxc-query-credentials', id, entries: [ { key, url,
 // username, password, totp } ] } and gets back { type: 'keepassxc-query-credentials-result', id,
 // result: 'ok' | 'locked' | 'error', statuses: { key: 'saved' | 'saved-no-totp' | 'differs' |
-// 'missing' } }. No dialog, no writes, and only sites the user confirmed a save from get answers.
+// 'missing' } }. No dialog, no writes. Only sites the user confirmed a save from get an answer,
+// it covers only entries saved from that site, and a site may ask once every two seconds.
 kpxcPageSave.onQuery = async function(event) {
     if (event.source !== window || event.data?.type !== 'keepassxc-query-credentials') {
         return;
@@ -73,7 +74,7 @@ kpxcPageSave.onQuery = async function(event) {
     const reply = (result, statuses = {}) => window.postMessage(
         { type: 'keepassxc-query-credentials-result', id, result, statuses }, window.location.origin);
 
-    const valid = Array.isArray(entries) && entries.length <= 500 && entries.every((e) => {
+    const valid = Array.isArray(entries) && entries.length <= 100 && entries.every((e) => {
         try {
             return (typeof e?.key === 'string' || typeof e?.key === 'number')
                 && typeof e.username === 'string'
@@ -94,6 +95,9 @@ kpxcPageSave.onQuery = async function(event) {
         const items = entries.map(e => ({ key: String(e.key), url: new URL(e.url).href, username: e.username,
             password: e.password, totp: e.totp }));
         const response = await sendMessage('page_save_query', [ items ]);
+        if (response?.silent) {
+            return; // Sites the user never confirmed a save from get no answer at all
+        }
         reply(response?.result ?? CreationError.GENERAL, response?.statuses);
     } catch (err) {
         logError(`Querying credentials for the page failed: ${err}`);
@@ -131,6 +135,9 @@ kpxcPageSave.onRemove = async function(event) {
     kpxcPageSave.busy = true;
     try {
         const lookup = await sendMessage('page_save_remove_lookup', [ target.href, username ]);
+        if (lookup?.silent) {
+            return; // Sites the user never confirmed a save from get no answer at all
+        }
         if (!lookup?.existing) {
             reply(lookup?.result ?? CreationError.GENERAL);
             return;
