@@ -111,6 +111,10 @@
         "message": "$1 wants to update the KeePassXC entry \"$2\" ($3) with the login it sent.\n\nUpdate it?",
         "description": "Confirmation when a web page asks to save a credential that matches an existing entry. $1 is the requesting origin, $2 the entry title, $3 its username."
     },
+    "pageSaveConfirmRemove": {
+        "message": "$1 wants to REMOVE the KeePassXC entry \"$2\" ($3).\n\nKeePassXC moves it to the Recycle Bin, or deletes it permanently if your database has the Recycle Bin turned off. KeePassXC will ask once more.\n\nRemove it?",
+        "description": "Confirmation when a web page asks to remove an entry. $1 is the requesting origin, $2 the entry title, $3 its username."
+    },
     "contextMenuSaveCredentials": {
         "message": "Save Credentials",
         "description": "Save credentials using the credential banner."

@@ -248,3 +248,64 @@ pageSave.onQuery = async function(tab, args = []) {
     pageSave.log('query:', `${requested.length} rows ->`, JSON.stringify(statuses));
     return { result: 'ok', statuses };
 };
+
+// Finds the single entry to remove. More than one match is an error: never guess what to delete.
+pageSave.findForRemoval = async function(tab, url, username) {
+    if (!await pageSave.isTrusted(tab)) {
+        pageSave.log('remove refused: no save was confirmed from', pageSave.originOf(tab));
+        return { result: CreationError.GENERAL };
+    }
+
+    const entries = await keepass.retrieveCredentials(tab, [ url, url, true ]);
+    if (keepass.isDatabaseClosed) {
+        return { result: 'locked' };
+    }
+    if (!keepass.isConnected) {
+        return { result: CreationError.GENERAL };
+    }
+
+    const matches = entries.filter(e => e.login?.toLowerCase() === username.toLowerCase());
+    pageSave.log('remove lookup:', url, pageSave.mask(username), `${matches.length} matching entries`);
+    if (matches.length === 0) {
+        return { result: 'missing' };
+    }
+    if (matches.length > 1) {
+        return { result: CreationError.GENERAL };
+    }
+    return { entry: matches[0] };
+};
+
+// Args: [ url, username ]. Tells the content script which entry would be removed.
+pageSave.onRemoveLookup = async function(tab, args = []) {
+    const [ url, username ] = args;
+    const found = await pageSave.findForRemoval(tab, url, username);
+    return found.entry ? { existing: { name: found.entry.name, login: found.entry.login } } : { result: found.result };
+};
+
+// Args: [ url, username ]. Returns removed, missing, canceled, locked or error.
+pageSave.onRemoveCommit = async function(tab, args = []) {
+    const [ url, username ] = args;
+    const found = await pageSave.findForRemoval(tab, url, username);
+    if (!found.entry) {
+        return found.result;
+    }
+
+    // KeePassXC asks once more, then moves the entry to the Recycle Bin
+    const [ dbid ] = keepass.getCryptoKey();
+    const nonce = keepassClient.getNonce();
+    const response = await keepassClient.sendMessage('delete-entry', tab,
+        { action: 'delete-entry', id: dbid, uuid: found.entry.uuid }, nonce);
+    pageSave.log('remove:', found.entry.uuid, '-> KeePassXC replied', JSON.stringify(response?.success));
+
+    // "false" also means the user said No, so check whether the entry is really gone
+    const after = await keepass.retrieveCredentials(tab, [ url, url, false ]);
+    if (!keepass.isConnected || keepass.isDatabaseClosed) {
+        return CreationError.GENERAL;
+    }
+    const stillThere = after.some(e => e.uuid === found.entry.uuid);
+    pageSave.log('remove read back:', stillThere ? 'entry still present' : 'entry gone');
+    if (!stillThere) {
+        return 'removed';
+    }
+    return response?.success === 'false' ? CreationError.CANCELED : CreationError.GENERAL;
+};

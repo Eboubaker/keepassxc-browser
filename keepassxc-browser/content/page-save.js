@@ -103,6 +103,54 @@ kpxcPageSave.onQuery = async function(event) {
     }
 };
 
+// The page posts { type: 'keepassxc-remove-credentials', id, url, username } and gets back
+// { type: 'keepassxc-remove-credentials-result', id, result: 'removed' | 'missing' | 'canceled' |
+// 'locked' | 'error' }. Only sites the user confirmed a save from may ask, the user confirms here
+// and again in KeePassXC, and KeePassXC moves the entry to the Recycle Bin.
+kpxcPageSave.onRemove = async function(event) {
+    if (event.source !== window || event.data?.type !== 'keepassxc-remove-credentials') {
+        return;
+    }
+
+    const { id, url, username } = event.data;
+    const reply = (result) => window.postMessage({ type: 'keepassxc-remove-credentials-result', id, result },
+        window.location.origin);
+
+    let target;
+    try {
+        target = new URL(url);
+    } catch (_e) {
+        target = undefined;
+    }
+    if (kpxcPageSave.busy || typeof username !== 'string' || !username
+        || ![ 'http:', 'https:' ].includes(target?.protocol)) {
+        reply(CreationError.GENERAL);
+        return;
+    }
+
+    kpxcPageSave.busy = true;
+    try {
+        const lookup = await sendMessage('page_save_remove_lookup', [ target.href, username ]);
+        if (!lookup?.existing) {
+            reply(lookup?.result ?? CreationError.GENERAL);
+            return;
+        }
+
+        // eslint-disable-next-line no-alert
+        if (!window.confirm(tr('pageSaveConfirmRemove', [ window.location.origin, lookup.existing.name, lookup.existing.login ]))) {
+            reply(CreationError.CANCELED);
+            return;
+        }
+
+        reply(await sendMessage('page_save_remove_commit', [ target.href, username ]) ?? CreationError.GENERAL);
+    } catch (err) {
+        logError(`Removing credentials for the page failed: ${err}`);
+        reply(CreationError.GENERAL);
+    } finally {
+        kpxcPageSave.busy = false;
+    }
+};
+
 // Copies a message for logging with every credential removed: passwords, TOTP secrets and
 // anything else that looks like a secret become '<removed>', usernames are masked
 kpxcPageSave.redact = function(value, key = '') {
@@ -135,4 +183,5 @@ if (window.self === window.top) {
     window.addEventListener('message', kpxcPageSave.onAnyMessage);
     window.addEventListener('message', kpxcPageSave.onMessage);
     window.addEventListener('message', kpxcPageSave.onQuery);
+    window.addEventListener('message', kpxcPageSave.onRemove);
 }

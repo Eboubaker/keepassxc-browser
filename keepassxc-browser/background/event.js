@@ -249,6 +249,8 @@ kpxcEvent.messageHandlers = {
     'page_save_log': pageSave.onLog,
     'page_save_lookup': pageSave.onLookup,
     'page_save_query': pageSave.onQuery,
+    'page_save_remove_commit': pageSave.onRemoveCommit,
+    'page_save_remove_lookup': pageSave.onRemoveLookup,
     'associate': keepass.associate,
     'banner_get_position': page.getBannerPosition,
     'banner_set_position': page.setBannerPosition,
