@@ -15,9 +15,10 @@ try {
         'tabs.js',
         'credentials.js',
         'page.js',
-        'event.js',
         'jsQR.js',
         'save-totp.js',
+        'page-save.js',
+        'event.js',
         'init.js'
     );
 } catch (e) {

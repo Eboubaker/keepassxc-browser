@@ -107,6 +107,10 @@
         "message": "$1 wants to save a login to KeePassXC:\n\nSite: $2\nUsername: $3\n\nSave it?",
         "description": "Confirmation when a web page asks to save a credential. $1 is the requesting origin, $2 the entry URL, $3 the username."
     },
+    "pageSaveConfirmUpdate": {
+        "message": "$1 wants to update the KeePassXC entry \"$2\" ($3) with the login it sent.\n\nUpdate it?",
+        "description": "Confirmation when a web page asks to save a credential that matches an existing entry. $1 is the requesting origin, $2 the entry title, $3 its username."
+    },
     "contextMenuSaveCredentials": {
         "message": "Save Credentials",
         "description": "Save credentials using the credential banner."

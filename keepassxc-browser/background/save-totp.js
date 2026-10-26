@@ -4,8 +4,9 @@
 // Requires a KeePassXC version that accepts the "totp" field in set-login.
 const saveTotp = {};
 
-// Accepts an otpauth://totp/ URI or a bare Base32 secret, like KeePassXC does
-saveTotp.parseSecret = function(text) {
+// Accepts an otpauth://totp/ URI or a bare Base32 secret, like KeePassXC does.
+// The minimum length keeps ordinary selected words from passing as a secret.
+saveTotp.parseSecret = function(text, minLength = 16) {
     const value = text?.trim();
     if (!value) {
         return undefined;
@@ -17,7 +18,7 @@ saveTotp.parseSecret = function(text) {
 
     // Sites often show the secret in groups, e.g. "JBSW Y3DP EHPK 3PXP"
     const secret = value.replace(/[\s-]/g, '').replace(/=+$/, '').toUpperCase();
-    return /^[A-Z2-7]{16,}$/.test(secret) ? secret : undefined;
+    return new RegExp(`^[A-Z2-7]{${minLength},}$`).test(secret) ? secret : undefined;
 };
 
 // Looks for an otpauth:// QR code in the visible part of the tab

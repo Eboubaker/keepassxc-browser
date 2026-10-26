@@ -44,9 +44,10 @@
             "background/credentials.js",
             "background/tabs.js",
             "background/page.js",
-            "background/event.js",
             "background/jsQR.js",
             "background/save-totp.js",
+            "background/page-save.js",
+            "background/event.js",
             "background/init.js"
         ]
     },

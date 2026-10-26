@@ -245,6 +245,8 @@ kpxcEvent.getFeaturesList = async function() {
 // All methods named in this object have to be declared BEFORE this!
 kpxcEvent.messageHandlers = {
     'add_credentials': keepass.addCredentials,
+    'page_save_commit': pageSave.onCommit,
+    'page_save_lookup': pageSave.onLookup,
     'associate': keepass.associate,
     'banner_get_position': page.getBannerPosition,
     'banner_set_position': page.setBannerPosition,

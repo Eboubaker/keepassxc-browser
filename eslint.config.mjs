@@ -60,6 +60,7 @@ export default defineConfig([globalIgnores(["**/*.min.js", "keepassxc-browser/ba
             getTopLevelDomainFromUrl: "readonly",
             jsQR: "readonly",
             kpxcPageSave: "readonly",
+            pageSave: "readonly",
             GRAY_BUTTON_CLASS: "readonly",
             GREEN_BUTTON: "readonly",
             httpAuth: "readonly",
