@@ -103,8 +103,36 @@ kpxcPageSave.onQuery = async function(event) {
     }
 };
 
+// Copies a message for logging with every credential removed: passwords, TOTP secrets and
+// anything else that looks like a secret become '<removed>', usernames are masked
+kpxcPageSave.redact = function(value, key = '') {
+    if (/pass|secret|otp|token|auth|cookie|session/i.test(key) || /^otpauth:/i.test(value)) {
+        return value ? '<removed>' : value;
+    }
+    if (/user|login|mail/i.test(key) && typeof value === 'string') {
+        return value.replace(/^(.).*?(@|$)/, (_m, first, at) => `${first}***${at}`);
+    }
+    if (Array.isArray(value)) {
+        return value.map(v => kpxcPageSave.redact(v));
+    }
+    if (value && typeof value === 'object') {
+        return Object.fromEntries(Object.entries(value).map(([ k, v ]) => [ k, kpxcPageSave.redact(v, k) ]));
+    }
+    return value;
+};
+
+// Logs every keepassxc-* message on the page, requests and replies alike, in the
+// service worker console
+kpxcPageSave.onAnyMessage = function(event) {
+    if (event.source !== window || typeof event.data?.type !== 'string' || !event.data.type.startsWith('keepassxc-')) {
+        return;
+    }
+    sendMessage('page_save_log', [ kpxcPageSave.redact(event.data) ]).catch(() => {});
+};
+
 // Only the top window handles requests, so frames from other sites can't trigger dialogs
 if (window.self === window.top) {
+    window.addEventListener('message', kpxcPageSave.onAnyMessage);
     window.addEventListener('message', kpxcPageSave.onMessage);
     window.addEventListener('message', kpxcPageSave.onQuery);
 }

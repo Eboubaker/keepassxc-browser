@@ -246,6 +246,7 @@ kpxcEvent.getFeaturesList = async function() {
 kpxcEvent.messageHandlers = {
     'add_credentials': keepass.addCredentials,
     'page_save_commit': pageSave.onCommit,
+    'page_save_log': pageSave.onLog,
     'page_save_lookup': pageSave.onLookup,
     'page_save_query': pageSave.onQuery,
     'associate': keepass.associate,

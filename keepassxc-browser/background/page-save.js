@@ -5,6 +5,22 @@
 // and reads the entry back to confirm KeePassXC really stored what was sent.
 const pageSave = {};
 
+// Service worker console logging. Never pass passwords or TOTP secrets here.
+pageSave.log = function(...parts) {
+    console.log('[KeePassXC page]', ...parts);
+};
+
+pageSave.mask = function(username) {
+    return typeof username === 'string' ? username.replace(/^(.).*?(@|$)/, (_m, first, at) => `${first}***${at}`) : username;
+};
+
+// Args: [ message ], already redacted by the content script
+pageSave.onLog = async function(tab, args = []) {
+    const [ message ] = args;
+    const direction = message?.type?.endsWith('-result') ? 'extension -> page' : 'page -> extension';
+    pageSave.log(direction, pageSave.originOf(tab) ?? '', JSON.stringify(message));
+};
+
 // Finds the entry KeePassXC holds for the URL with this username
 pageSave.lookup = async function(tab, url, username) {
     const entries = await keepass.retrieveCredentials(tab, [ url, url, true ]);
@@ -93,8 +109,11 @@ pageSave.onLookup = async function(tab, args = []) {
 
     const found = await pageSave.lookup(tab, url, username);
     if (found.error) {
+        pageSave.log('lookup: KeePassXC not connected or database locked', url);
         return { result: CreationError.GENERAL };
     }
+    pageSave.log('lookup:', url, pageSave.mask(username), `${found.entries.length} entries for the URL,`,
+        found.entry ? `matches ${found.entry.uuid}` : 'no entry with this username');
     if (found.entry && await pageSave.holds(found.entry, password, totp)) {
         return { result: 'unchanged' };
     }
@@ -123,6 +142,8 @@ pageSave.onCommit = async function(tab, args = []) {
     }
 
     const result = await keepass.updateCredentials(tab, [ existing?.uuid, username, password, url, null, null, totp ]);
+    pageSave.log('commit:', existing ? `update ${existing.uuid}` : 'new entry', pageSave.mask(username),
+        totp ? 'with TOTP' : 'without TOTP', '-> KeePassXC replied', result);
     if (result === CreationError.REFERENCES || (!existing && result !== CreationError.CREATED)) {
         return CreationError.GENERAL;
     }
@@ -137,6 +158,8 @@ pageSave.onCommit = async function(tab, args = []) {
     const saved = existing
         ? after.entries.find(e => e.uuid === existing.uuid)
         : after.entries.find(e => e.login === username && !knownUuids.has(e.uuid));
+    pageSave.log('read back:', saved ? `entry ${saved.uuid},` : 'entry not found,',
+        saved ? `password ${saved.password === password ? 'matches' : 'differs'}, TOTP ${saved.totp ? 'present' : 'absent'}` : '');
 
     if (await pageSave.holds(saved, password, totp)) {
         return existing ? 'updated' : CreationError.CREATED;
@@ -182,7 +205,7 @@ pageSave.isTrusted = async function(tab) {
 pageSave.onQuery = async function(tab, args = []) {
     const [ requested = [] ] = args;
     if (!await pageSave.isTrusted(tab)) {
-        logDebug('Credential query ignored from a site no save was confirmed from');
+        pageSave.log('query refused: no save was confirmed from', pageSave.originOf(tab));
         return { result: CreationError.GENERAL };
     }
 
@@ -222,5 +245,6 @@ pageSave.onQuery = async function(tab, args = []) {
         }
     }
 
+    pageSave.log('query:', `${requested.length} rows ->`, JSON.stringify(statuses));
     return { result: 'ok', statuses };
 };
