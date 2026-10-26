@@ -110,6 +110,9 @@ pageSave.onCommit = async function(tab, args = []) {
         return 'invalid-totp';
     }
 
+    // The user confirmed a save from this site, so it may also ask which logins are saved
+    await pageSave.trustOrigin(tab);
+
     const before = await pageSave.lookup(tab, url, username);
     if (before.error) {
         return CreationError.GENERAL;
@@ -143,4 +146,81 @@ pageSave.onCommit = async function(tab, args = []) {
         return CreationError.CANCELED;
     }
     return saved?.password === password ? 'totp-not-saved' : CreationError.GENERAL;
+};
+
+// Sites the user confirmed a save from. Only they may query, because a query runs without a
+// dialog and would otherwise let any site probe which accounts the database holds.
+pageSave.originOf = function(tab) {
+    try {
+        const origin = new URL(tab?.url).origin;
+        return origin.startsWith('http') ? origin : undefined;
+    } catch (_e) {
+        return undefined;
+    }
+};
+
+pageSave.trustOrigin = async function(tab) {
+    const origin = pageSave.originOf(tab);
+    if (!origin) {
+        return;
+    }
+    const { pageSaveTrustedOrigins = [] } = await browser.storage.local.get('pageSaveTrustedOrigins');
+    if (!pageSaveTrustedOrigins.includes(origin)) {
+        await browser.storage.local.set({ pageSaveTrustedOrigins: [ ...pageSaveTrustedOrigins, origin ] });
+    }
+};
+
+pageSave.isTrusted = async function(tab) {
+    const origin = pageSave.originOf(tab);
+    const { pageSaveTrustedOrigins = [] } = await browser.storage.local.get('pageSaveTrustedOrigins');
+    return Boolean(origin) && pageSaveTrustedOrigins.includes(origin);
+};
+
+// Args: [ entries ] with { key, url, username, password, totp }. Reads only: never writes,
+// never unlocks the database, and returns only a status per key, never entry contents.
+// Statuses: saved, saved-no-totp, differs, missing.
+pageSave.onQuery = async function(tab, args = []) {
+    const [ requested = [] ] = args;
+    if (!await pageSave.isTrusted(tab)) {
+        logDebug('Credential query ignored from a site no save was confirmed from');
+        return { result: CreationError.GENERAL };
+    }
+
+    const statuses = {};
+    const byUrl = new Map();
+    for (const item of requested) {
+        byUrl.set(item.url, [ ...(byUrl.get(item.url) ?? []), item ]);
+    }
+
+    for (const [ url, items ] of byUrl) {
+        const entries = await keepass.retrieveCredentials(tab, [ url, url, false ]);
+        if (keepass.isDatabaseClosed) {
+            return { result: 'locked' };
+        }
+        if (!keepass.isConnected) {
+            return { result: CreationError.GENERAL };
+        }
+
+        for (const item of items) {
+            const totp = item.totp ? saveTotp.parseSecret(item.totp, 1) : undefined;
+            if (item.totp && !totp) {
+                continue; // An invalid secret can't be compared, so leave this row's status out
+            }
+            const entry = item.username
+                ? entries.find(e => e.login?.toLowerCase() === item.username.toLowerCase())
+                : undefined;
+
+            if (!entry) {
+                statuses[item.key] = 'missing';
+            } else if (entry.password !== item.password) {
+                statuses[item.key] = 'differs';
+            } else if (await pageSave.holds(entry, item.password, totp)) {
+                statuses[item.key] = 'saved';
+            } else {
+                statuses[item.key] = 'saved-no-totp';
+            }
+        }
+    }
+
+    return { result: 'ok', statuses };
 };
